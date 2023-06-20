@@ -69,38 +69,37 @@ class FaceMesh(metaclass=Singleton):
             ConfigManager().config["shape_smooth"])
 
     def calc_track_loc(self, mp_result, use_transformation_matrix=False):
+        """
+        Calculates the location of the face to track on the screen.
+
+        Args:
+            mp_result (mediapipe.python.solution_base.SolutionOutputs): The output of the MediaPipe FaceMesh model.
+            use_transformation_matrix (bool, optional): Whether to use the facial transformation matrix to calculate the
+                track location. Defaults to False.
+
+        Returns:
+            numpy.ndarray: The location of the face to track on the screen as a numpy array of shape (2,) and dtype float32.
+        """
         screen_w = ConfigManager().config["fix_width"]
         screen_h = ConfigManager().config["fix_height"]
         landmarks = mp_result.face_landmarks[0]
 
         if use_transformation_matrix:
-            M = mp_result.facial_transformation_matrixes[0]
-            U, _, V = np.linalg.svd(M[:3, :3])
-            R = U @ V
+            M = mp_result.facial_transformation_matrixes[0][:3, :3]
+            R = np.dot(M[:3, :3], np.array([0, 0, 1]))
 
-            res = R @ np.array([0, 0, 1])
-
-            x_pixel = (res[0] / 1) * 0.3
-            y_pixel = (res[1] / 1) * 0.3
+            x_pixel = (R[0] / 1) * 0.3
+            y_pixel = (R[1] / 1) * 0.3
 
             x_pixel = screen_w / 2 + (x_pixel * screen_w / 2)
             y_pixel = screen_h / 2 - (y_pixel * screen_h / 2)
 
         else:
-            axs = []
-            ays = []
-
-            for p in ConfigManager().config["tracking_vert_idxs"]:
-                px = landmarks[p].x * screen_w
-                py = landmarks[p].y * screen_h
-                axs.append(px)
-                ays.append(py)
-
+            axs, ays = zip(*[(landmarks[p].x * screen_w, landmarks[p].y * screen_h) for p in ConfigManager().config["tracking_vert_idxs"]])
             x_pixel = np.mean(axs)
             y_pixel = np.mean(ays)
 
         return np.array([x_pixel, y_pixel], np.float32)
-
     def mp_callback(self, mp_result, output_image, timestamp_ms: int):
         if len(mp_result.face_landmarks) >= 1 and len(
                 mp_result.face_blendshapes) >= 1:
